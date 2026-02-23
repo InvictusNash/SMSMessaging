@@ -13,7 +13,10 @@ export async function POST(req: NextRequest) {
     const { conversationId, body, userId, userEmail } = await req.json()
 
     if (!conversationId || !body) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      )
     }
 
     const supabase = createAdminSupabase()
@@ -26,17 +29,27 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (convoError || !convo) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 }
+      )
     }
 
     const contact = convo.contacts
     const toPhone = contact.phone
 
-    // Send via Twilio
+    if (!toPhone) {
+      return NextResponse.json(
+        { error: 'Contact has no phone number' },
+        { status: 400 }
+      )
+    }
+
+    // ✅ Send via Twilio Messaging Service
     await twilioClient.messages.create({
       body,
-      from: process.env.TWILIO_PHONE_NUMBER!,
       to: toPhone,
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID!,
     })
 
     const sentAt = new Date().toISOString()
@@ -54,10 +67,13 @@ export async function POST(req: NextRequest) {
 
     if (msgError) throw msgError
 
-    // Update conversation last_message
+    // Update conversation last message
     await supabase
       .from('conversations')
-      .update({ last_message_at: sentAt, last_message_body: body })
+      .update({
+        last_message_at: sentAt,
+        last_message_body: body,
+      })
       .eq('id', conversationId)
 
     // Log to Monday if contact has a monday_item_id
@@ -76,6 +92,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Send error:', err)
-    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to send message' },
+      { status: 500 }
+    )
   }
 }
