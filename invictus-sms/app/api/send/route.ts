@@ -13,10 +13,7 @@ export async function POST(req: NextRequest) {
     const { conversationId, body, userId, userEmail } = await req.json()
 
     if (!conversationId || !body) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const supabase = createAdminSupabase()
@@ -29,27 +26,29 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (convoError || !convo) {
-      return NextResponse.json(
-        { error: 'Conversation not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
     const contact = convo.contacts
     const toPhone = contact.phone
 
     if (!toPhone) {
+      return NextResponse.json({ error: 'Contact has no phone number' }, { status: 400 })
+    }
+
+    const fromNumber = process.env.TWILIO_FROM_NUMBER
+    if (!fromNumber) {
       return NextResponse.json(
-        { error: 'Contact has no phone number' },
-        { status: 400 }
+        { error: 'Missing TWILIO_FROM_NUMBER env var' },
+        { status: 500 }
       )
     }
 
-    // ✅ Send via Twilio Messaging Service
+    // ✅ Send via Twilio from a fixed number
     await twilioClient.messages.create({
       body,
+      from: fromNumber,
       to: toPhone,
-      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID!,
     })
 
     const sentAt = new Date().toISOString()
@@ -67,13 +66,10 @@ export async function POST(req: NextRequest) {
 
     if (msgError) throw msgError
 
-    // Update conversation last message
+    // Update conversation last_message
     await supabase
       .from('conversations')
-      .update({
-        last_message_at: sentAt,
-        last_message_body: body,
-      })
+      .update({ last_message_at: sentAt, last_message_body: body })
       .eq('id', conversationId)
 
     // Log to Monday if contact has a monday_item_id
@@ -92,9 +88,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Send error:', err)
-    return NextResponse.json(
-      { error: 'Failed to send message' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }
 }
