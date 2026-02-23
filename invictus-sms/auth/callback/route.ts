@@ -12,8 +12,3 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.redirect(`${origin}/conversations`)
 }
-```
-
-Then in Supabase → Authentication → URL Configuration → add this to Redirect URLs:
-```
-https://sms-messaging-olive.vercel.app/auth/callback
