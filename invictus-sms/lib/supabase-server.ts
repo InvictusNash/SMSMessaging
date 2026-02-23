@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
@@ -10,11 +10,11 @@ export function createServerSupabase() {
     {
       cookies: {
         get(name: string) { return cookieStore.get(name)?.value },
-        set(name: string, value: string, options: Record<string, unknown>) {
-          try { cookieStore.set({ name, value, ...options } as Parameters<typeof cookieStore.set>[0]) } catch {}
+        set(name: string, value: string, options: CookieOptions) {
+          try { cookieStore.set({ name, value, ...options }) } catch {}
         },
-        remove(name: string, options: Record<string, unknown>) {
-          try { cookieStore.set({ name, value: '', ...options } as Parameters<typeof cookieStore.set>[0]) } catch {}
+        remove(name: string, options: CookieOptions) {
+          try { cookieStore.set({ name, value: '', ...options }) } catch {}
         },
       },
     }
