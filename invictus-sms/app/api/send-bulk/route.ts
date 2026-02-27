@@ -15,6 +15,14 @@ function normalizePhone(phone: string) {
   return null
 }
 
+function applyMergeFields(template: string, contact: any) {
+  return template
+    .replace(/{{\s*name\s*}}/gi, contact?.name ?? '')
+    .replace(/{{\s*student_name\s*}}/gi, contact?.student_name ?? '')
+    .replace(/{{\s*grade\s*}}/gi, contact?.grade ?? '')
+    .replace(/{{\s*seat_url\s*}}/gi, contact?.seat_acceptance_url ?? '')
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { phoneList, body, userId, userEmail } = await req.json()
@@ -25,7 +33,6 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminSupabase()
 
-    // Split by comma, newline, or space
     const rawPhones = phoneList
       .split(/[\n,]+/)
       .map((p: string) => p.trim())
@@ -47,15 +54,22 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // Try to match contact (optional but helpful)
         const { data: contact } = await supabase
           .from('contacts')
           .select('*')
           .eq('phone', phone)
           .maybeSingle()
 
+        if (!contact?.seat_acceptance_url) {
+          // Skip if no seat link exists
+          results.skipped++
+          continue
+        }
+
+        const personalizedMessage = applyMergeFields(body, contact)
+
         await twilioClient.messages.create({
-          body,
+          body: personalizedMessage,
           from: process.env.TWILIO_FROM_NUMBER!,
           to: phone,
         })
@@ -66,7 +80,7 @@ export async function POST(req: NextRequest) {
           await supabase.from('messages').insert({
             conversation_id: null,
             direction: 'outbound',
-            body,
+            body: personalizedMessage,
             sent_at: sentAt,
             sent_by: userId ?? null,
             sent_by_name: userEmail ?? null,
@@ -78,7 +92,7 @@ export async function POST(req: NextRequest) {
               contactName: contact.name,
               phone,
               direction: 'outbound',
-              body,
+              body: personalizedMessage,
               sentAt,
               sentByName: userEmail ?? null,
             })
