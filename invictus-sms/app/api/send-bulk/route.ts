@@ -61,7 +61,6 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (!contact?.seat_acceptance_url) {
-          // Skip if no seat link exists
           results.skipped++
           continue
         }
@@ -77,14 +76,45 @@ export async function POST(req: NextRequest) {
         const sentAt = new Date().toISOString()
 
         if (contact) {
+          // Find or create conversation
+          let { data: conversation } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('contact_id', contact.id)
+            .maybeSingle()
+
+          if (!conversation) {
+            const { data: newConversation } = await supabase
+              .from('conversations')
+              .insert({
+                contact_id: contact.id,
+                last_message_at: sentAt,
+                last_message_body: personalizedMessage,
+              })
+              .select()
+              .single()
+
+            conversation = newConversation
+          }
+
+          // Insert message tied to conversation
           await supabase.from('messages').insert({
-            conversation_id: null,
+            conversation_id: conversation.id,
             direction: 'outbound',
             body: personalizedMessage,
             sent_at: sentAt,
             sent_by: userId ?? null,
             sent_by_name: userEmail ?? null,
           })
+
+          // Update conversation metadata
+          await supabase
+            .from('conversations')
+            .update({
+              last_message_at: sentAt,
+              last_message_body: personalizedMessage,
+            })
+            .eq('id', conversation.id)
 
           if (contact.monday_item_id) {
             await logMessageToMonday({
